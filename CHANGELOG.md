@@ -1,3 +1,9 @@
+## 0.4.8
+ - **FIX**: JWE JSON parsing now handles missing `recipients` / `header` by deriving a single recipient from the protected header and validates absent `encrypted_key` for non-`dir` algorithms.
+ - **FEAT**: Support unpadded Base64URL protected header (new parsing test). 
+ - **TEST**: Added fallback, AAD, key wrap, and error path tests.
+ - **CHORE**: Refactored `JsonWebEncryption.fromJson` for clarity.
+
 ## 0.4.7
  - **DEPS**: Remove dependency on `package:collection`
  - **UPGRADE**: Updated to use crypto_keys_plus 0.5.0 which uses pointycastle 4.0.0.
