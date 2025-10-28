@@ -73,20 +73,25 @@ class JsonWebEncryption extends JoseObject {
           List.unmodifiable(() {
             if (json.containsKey('recipients')) {
               // General JSON Serialization
-              return (json['recipients'] as List).map((v) => _JweRecipient._(
+              return (json['recipients'] as List).map(
+                (v) => _JweRecipient._(
                   header: JsonObject.from(v['header']),
-                  encryptedKey: decodeBase64EncodedBytes(v['encrypted_key'])));
+                  encryptedKey: decodeBase64EncodedBytes(v['encrypted_key']),
+                ),
+              );
             }
+            var encryptedKey = json.containsKey('encrypted_key')
+                ? decodeBase64EncodedBytes(json['encrypted_key'])
+                : <int>[];
+
             if (json.containsKey('header')) {
               // Flattened JSON Serialization (header present)
               var hdr = json['header'];
-              var encryptedKey = json.containsKey('encrypted_key')
-                  ? decodeBase64EncodedBytes(json['encrypted_key'])
-                  : <int>[];
               return [
                 _JweRecipient._(
-                    header: hdr == null ? null : JsonObject.from(hdr),
-                    encryptedKey: encryptedKey)
+                  header: hdr == null ? null : JsonObject.from(hdr),
+                  encryptedKey: encryptedKey,
+                ),
               ];
             }
             // (Do not treat presence of only 'encrypted_key' as flattened; fall back to protected header derivation)
@@ -100,7 +105,6 @@ class JsonWebEncryption extends JoseObject {
             }
             // We still build a single recipient to keep internal model consistent.
             // encrypted_key may be legitimately absent for direct encryption (alg == 'dir').
-            List<int> encryptedKey = <int>[];
             JsonObject? derivedRecipientHeader;
             var phDecoded = JsonObject.decode(protectedHeader);
             var alg = phDecoded['alg'];
@@ -112,17 +116,17 @@ class JsonWebEncryption extends JoseObject {
                 if (kid != null) 'kid': kid,
               });
             }
-            if (json.containsKey('encrypted_key')) {
-              encryptedKey = decodeBase64EncodedBytes(json['encrypted_key']);
-            } else {
-              if (alg != null && alg != 'dir') {
-                throw ArgumentError(
-                    'Missing encrypted_key for algorithm "$alg"');
-              }
+
+            // Encrypted key must be present unless alg == 'dir'.
+            if (encryptedKey.isEmpty && alg != null && alg != 'dir') {
+              throw ArgumentError('Missing encrypted_key for algorithm "$alg"');
             }
+
             return [
               _JweRecipient._(
-                  header: derivedRecipientHeader, encryptedKey: encryptedKey)
+                header: derivedRecipientHeader,
+                encryptedKey: encryptedKey,
+              ),
             ];
           }()),
           protectedHeader: JsonObject.decode(json['protected']),
