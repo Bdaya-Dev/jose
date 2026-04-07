@@ -1,5 +1,5 @@
 /// [JSON Object Signing and Encryption](https://tools.ietf.org/html/rfc7515)
-library jose.jose;
+library;
 
 import 'util.dart';
 import 'jws.dart';
@@ -13,12 +13,11 @@ import 'package:meta/meta.dart';
 /// [JsonWebSignature] and [JsonWebEncryption]
 class JoseHeader extends JsonObject {
   /// Constructs a [JoseHeader] from a [json] map
-  JoseHeader.fromJson(Map<String, dynamic> json) : super.from(json);
+  JoseHeader.fromJson(Map<String, dynamic> super.json) : super.from();
 
   /// Constructs a [JoseHeader] from a base64 [encodedString] representation of
   /// the json string
-  JoseHeader.fromBase64EncodedString(String encodedString)
-      : super.decode(encodedString);
+  JoseHeader.fromBase64EncodedString(super.encodedString) : super.decode();
 
   /// Identifies the cryptographic algorithm used to secure a [JsonWebSignature]
   /// or to encrypt or determine the value of a Content Encryption Key with

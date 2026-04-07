@@ -1,5 +1,5 @@
 /// [JSON Web Key](https://tools.ietf.org/html/rfc7517)
-library jose.jwk;
+library;
 
 import 'package:clock/clock.dart';
 import 'dart:async';
@@ -360,7 +360,7 @@ class JsonWebKey extends JsonObject {
       'kty': 'oct',
       'k': encodeBase64EncodedBytes(v),
       'use': 'enc',
-      'keyOperations': ['encrypt', 'decrypt']
+      'key_ops': ['encrypt', 'decrypt']
     })!;
   }
 
@@ -451,7 +451,7 @@ class JsonWebKeySet extends JsonObject {
       });
 
   /// Constructs a [JsonWebKeySet] from its JSON representation
-  JsonWebKeySet.fromJson(Map<String, dynamic> json) : super.from(json);
+  JsonWebKeySet.fromJson(Map<String, dynamic> super.json) : super.from();
 }
 
 /// A key store to lookup [JsonWebKey]s
@@ -485,24 +485,15 @@ class JsonWebKeyStore {
   }
 
   Stream<JsonWebKey> _allKeys(JoseHeader header) async* {
-    // The key provided by the 'jwk'
-    if (header.jsonWebKey != null) yield header.jsonWebKey!;
-    // Other applicable keys available to the application
+    // The keys added with `addKey`
     yield* Stream.fromIterable(_keys);
 
+    // The keys added with `addKeySet`
     for (var s in _keySets) {
       yield* Stream.fromIterable(s.keys);
     }
-/*
-    // TODO trust keys from header?
-    // Keys referenced by the 'jku'
-    if (header.jwkSetUrl != null) yield* _keysFromSet(header.jwkSetUrl);
-    // The key referenced by the 'x5u'
-    // TODO
-    // The key provided by the 'x5c'
-    // TODO
-*/
-    // Other applicable keys available to the application
+
+    // The keys added with `addKeySetUrl`
     for (var url in _keySetUrls) {
       yield* _keysFromSet(url).where((v) => v != null).cast();
     }
@@ -513,8 +504,7 @@ class JsonWebKeyStore {
       return false;
     }
 
-    if ((key.keyId != null && header.keyId != null) &&
-        (header.keyId != key.keyId)) {
+    if ((header.keyId != null) && (header.keyId != key.keyId)) {
       return false;
     }
 
