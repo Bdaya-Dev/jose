@@ -27,10 +27,12 @@ void main() {
 
         switch (a.use) {
           case 'sig':
+            expect(key.keyOperations, {'sign', 'verify'});
             var signature = key.sign(data);
             expect(key.verify(data, signature), isTrue);
             break;
           case 'enc':
+            expect(key.keyOperations, {'encrypt', 'decrypt'});
             var encrypted = key.encrypt(data);
             expect(
                 key.decrypt(encrypted.data,
