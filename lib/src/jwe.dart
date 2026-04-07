@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:archive/archive.dart';
 
+import 'ecdh.dart';
 import 'jose.dart';
 import 'jwk.dart';
 import 'util.dart';
@@ -75,7 +76,9 @@ class JsonWebEncryption extends JoseObject {
               // General JSON Serialization
               return (json['recipients'] as List).map(
                 (v) => _JweRecipient._(
-                  header: JsonObject.from(v['header']),
+                  header: v['header'] == null
+                      ? null
+                      : JsonObject.from(v['header']),
                   encryptedKey: decodeBase64EncodedBytes(v['encrypted_key']),
                 ),
               );
@@ -117,8 +120,11 @@ class JsonWebEncryption extends JoseObject {
               });
             }
 
-            // Encrypted key must be present unless alg == 'dir'.
-            if (encryptedKey.isEmpty && alg != null && alg != 'dir') {
+            // Encrypted key must be present unless alg == 'dir' or 'ECDH-ES'.
+            if (encryptedKey.isEmpty &&
+                alg != null &&
+                alg != 'dir' &&
+                alg != 'ECDH-ES') {
               throw ArgumentError('Missing encrypted_key for algorithm "$alg"');
             }
 
@@ -198,9 +204,59 @@ class JsonWebEncryption extends JoseObject {
     if (header.encryptionAlgorithm == 'none') {
       throw JoseException('Encryption algorithm cannot be `none`');
     }
-    var cek = header.algorithm == 'dir'
-        ? key
-        : key.unwrapKey(recipient.data, algorithm: header.algorithm);
+
+    JsonWebKey cek;
+    if (header.algorithm == 'dir') {
+      cek = key;
+    } else if (header.algorithm != null &&
+        header.algorithm!.startsWith('ECDH-ES')) {
+      // ECDH-ES key agreement
+      final epk = header.ephemeralPublicKey;
+      if (epk == null) {
+        throw JoseException('Missing ephemeral public key (epk) in header');
+      }
+      final encAlgorithm = header.encryptionAlgorithm!;
+      final algId = ecdhAlgorithmId(header.algorithm!, encAlgorithm);
+      final keyLen = ecdhKeyDataLen(header.algorithm!, encAlgorithm);
+
+      final apu = header.agreementPartyUInfo != null
+          ? Uint8List.fromList(decodeBase64EncodedBytes(header.agreementPartyUInfo!))
+          : null;
+      final apv = header.agreementPartyVInfo != null
+          ? Uint8List.fromList(decodeBase64EncodedBytes(header.agreementPartyVInfo!))
+          : null;
+
+      final derivedKey = ecdhEsDecrypt(
+        recipientPrivateKey: key,
+        ephemeralPublicKey: epk,
+        algorithmId: algId,
+        keyDataLen: keyLen,
+        apu: apu,
+        apv: apv,
+      );
+
+      if (header.algorithm == 'ECDH-ES') {
+        // Direct key agreement — derived key IS the CEK
+        cek = JsonWebKey.fromJson({
+          'kty': 'oct',
+          'k': encodeBase64EncodedBytes(derivedKey),
+          'use': 'enc',
+          'key_ops': ['encrypt', 'decrypt'],
+        })!;
+      } else {
+        // ECDH-ES+A*KW — derived key unwraps the CEK
+        final unwrappedCekBytes =
+            ecdhEsUnwrapKey(derivedKey, recipient.data);
+        cek = JsonWebKey.fromJson({
+          'kty': 'oct',
+          'k': encodeBase64EncodedBytes(unwrappedCekBytes),
+          'use': 'enc',
+          'key_ops': ['encrypt', 'decrypt'],
+        })!;
+      }
+    } else {
+      cek = key.unwrapKey(recipient.data, algorithm: header.algorithm);
+    }
 
     var uncompressed = cek.decrypt(data,
         initializationVector: initializationVector,
@@ -272,6 +328,10 @@ class JsonWebEncryptionBuilder extends JoseObjectBuilder<JsonWebEncryption> {
     var recipientsMapped = recipients.map((r) {
       var key = r['_jwk'] as JsonWebKey;
       var algorithm = r['alg'] ?? key.algorithmForOperation('wrapKey') ?? 'dir';
+
+      List<int> encryptedKey;
+      var unprotectedHeaderParams = <String, dynamic>{'alg': algorithm};
+
       if (algorithm == 'dir') {
         if (recipients.length > 1) {
           throw StateError(
@@ -285,15 +345,42 @@ class JsonWebEncryptionBuilder extends JoseObjectBuilder<JsonWebEncryption> {
           throw UnimplementedError('Unkown key.');
         }
         cek = k;
-      }
-      var encryptedKey = algorithm == 'dir'
-          ? const <int>[]
-          : key.wrapKey(
-              cek,
-              algorithm: algorithm,
-            );
+        encryptedKey = const <int>[];
+      } else if (algorithm.startsWith('ECDH-ES')) {
+        // ECDH-ES key agreement
+        final algId = ecdhAlgorithmId(algorithm, encryptionAlgorithm!);
+        final keyLen = ecdhKeyDataLen(algorithm, encryptionAlgorithm!);
 
-      var unprotectedHeaderParams = <String, dynamic>{'alg': algorithm};
+        final result = ecdhEsDerive(
+          recipientPublicKey: key,
+          algorithmId: algId,
+          keyDataLen: keyLen,
+        );
+
+        // Add EPK to header
+        unprotectedHeaderParams['epk'] = result.ephemeralPublicKey.toJson();
+
+        if (algorithm == 'ECDH-ES') {
+          // Direct key agreement — derived key IS the CEK
+          if (recipients.length > 1) {
+            throw StateError(
+                'JWE can only have one recipient when using ECDH-ES direct key agreement.');
+          }
+          cek = JsonWebKey.fromJson({
+            'kty': 'oct',
+            'k': encodeBase64EncodedBytes(result.derivedKey),
+            'use': 'enc',
+            'alg': encryptionAlgorithm,
+            'key_ops': ['encrypt', 'decrypt'],
+          })!;
+          encryptedKey = const <int>[];
+        } else {
+          // ECDH-ES+A*KW — derived key wraps the CEK
+          encryptedKey = ecdhEsWrapKey(result.derivedKey, cek);
+        }
+      } else {
+        encryptedKey = key.wrapKey(cek, algorithm: algorithm);
+      }
       if (key.keyId != null) {
         unprotectedHeaderParams['kid'] = key.keyId;
       }

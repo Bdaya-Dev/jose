@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:jose_plus/jose.dart';
-import 'package:jose_plus/src/util.dart';
 import 'package:test/test.dart';
 
 void main() {
