@@ -158,6 +158,38 @@ void main() {
     expect(claims.expiry, DateTime.fromMillisecondsSinceEpoch(1300819380000));
   });
 
+  group('Verification key selection', () {
+    test('JWT with header jwk is rejected when no matching trusted key exists',
+        () async {
+      final trustedKey = JsonWebKey.generate('RS256');
+      final keyStore = JsonWebKeyStore()..addKey(trustedKey);
+
+      final alternateKey = JsonWebKey.generate('RS256');
+      final claims = JsonWebTokenClaims.fromJson({
+        'sub': 'user-2',
+        'iss': 'https://trusted-issuer.example.com',
+        'aud': 'my-application',
+        'exp': DateTime.now().add(const Duration(hours: 1)).millisecondsSinceEpoch ~/ 1000,
+        'iat': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      });
+      final builder = JsonWebSignatureBuilder()
+        ..jsonContent = claims.toJson()
+        ..setProtectedHeader('typ', 'JWT')
+        ..addRecipient(alternateKey, algorithm: 'RS256')
+        ..setProtectedHeader(
+            'jwk',
+            JsonWebKey.fromCryptoKeys(
+                    publicKey: alternateKey.cryptoKeyPair.publicKey)
+                .toJson());
+      final jwtCompact = builder.build().toCompactSerialization();
+
+      expect(
+        () => JsonWebToken.decodeAndVerify(jwtCompact, keyStore),
+        throwsA(isA<JoseException>()),
+      );
+    });
+  });
+
   group('JWT with ES256K signature', () {
     test('JWT with ES256K signature', () async {
       var key = JsonWebKey.fromJson({

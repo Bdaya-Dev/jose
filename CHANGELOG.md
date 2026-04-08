@@ -35,7 +35,18 @@
 ## 0.4.0
  - **FIX**: use `x509_plus` and `crypto_keys_plus`.
 
+## 0.3.5+1
+
+ - **FIX**: try all keys when kid is absent. ([8fd48600](https://github.com/appsup-dart/jose/commit/8fd486004f267bd728372f2dc549c87ffb27fd19))
+ - **FIX**: parse jws from json with multiple signatures ([#57](https://github.com/appsup-dart/jose/issues/57)). ([87215b78](https://github.com/appsup-dart/jose/commit/87215b7868f0402d9868928e8be756c0111b5cfb))
+ - **FIX**: key_ops JWK field according to the RFC (pull request [#62](https://github.com/appsup-dart/jose/issues/62) from sgt). ([331df9ff](https://github.com/appsup-dart/jose/commit/331df9fff020e808b9bd902f453554afe82c80c9))
+ - **FIX**: improved key resolution in JsonWebKeyStore. ([b07799aa](https://github.com/appsup-dart/jose/commit/b07799aac1f56a9a21483feac026272aab30cc5d))
+
+
 ## 0.3.5
+
+ - **REFACTOR**: support for archive ^4.0.0. ([d6150a5a](https://github.com/appsup-dart/jose/commit/d6150a5aae365127936c821888e0923ac2ba45d3))
+ - **FEAT**: support compressed data in jwe. ([4f1dd72d](https://github.com/appsup-dart/jose/commit/4f1dd72d1b764fa174e11546f47efbc68a83f37c))
 
 ## 0.3.4
 

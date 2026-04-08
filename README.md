@@ -1,5 +1,8 @@
 
 [![Build Status](https://travis-ci.org/Bdaya-Dev/jose.svg?branch=master)](https://travis-ci.org/Bdaya-Dev/jose) 
+
+[![Ceasefire Now](https://badge.techforpalestine.org/default)](https://techforpalestine.org/learn-more)
+
 [:heart: sponsor](https://github.com/sponsors/rbellens)
 
 
