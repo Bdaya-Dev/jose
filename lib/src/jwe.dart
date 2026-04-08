@@ -1,8 +1,10 @@
 /// [JSON Web Encryption](https://tools.ietf.org/html/rfc7516)
-library jose.jwe;
+library;
 
 import 'dart:math';
 import 'dart:typed_data';
+
+import 'package:archive/archive.dart';
 
 import 'jose.dart';
 import 'jwk.dart';
@@ -33,14 +35,14 @@ class JsonWebEncryption extends JoseObject {
   final List<int> authenticationTag;
 
   JsonWebEncryption._(
-    List<int> data,
-    List<_JweRecipient> recipients, {
+    super.data,
+    List<_JweRecipient> super.recipients, {
     JsonObject? protectedHeader,
     JsonObject? unprotectedHeader,
     this.initializationVector = const [],
     this.additionalAuthenticatedData,
     this.authenticationTag = const [],
-  }) : super(data, recipients,
+  }) : super(
             sharedProtectedHeader: protectedHeader,
             sharedUnprotectedHeader: unprotectedHeader);
 
@@ -199,11 +201,21 @@ class JsonWebEncryption extends JoseObject {
     var cek = header.algorithm == 'dir'
         ? key
         : key.unwrapKey(recipient.data, algorithm: header.algorithm);
-    return cek.decrypt(data,
+
+    var uncompressed = cek.decrypt(data,
         initializationVector: initializationVector,
         additionalAuthenticatedData: Uint8List.fromList(aad.codeUnits),
         authenticationTag: authenticationTag,
         algorithm: header.encryptionAlgorithm);
+    switch (header.compressionAlgorithm) {
+      case null:
+        return uncompressed;
+      case 'DEF':
+        return Inflate(uncompressed).getBytes();
+      default:
+        throw JoseException(
+            'Unsupported compression algorithm ${header.compressionAlgorithm}');
+    }
   }
 }
 
@@ -229,6 +241,10 @@ class JsonWebEncryptionBuilder extends JoseObjectBuilder<JsonWebEncryption> {
   /// Authentication Tag.
   String? encryptionAlgorithm = 'A128CBC-HS256';
 
+  /// The compression algorithm to be used to compress the plaintext before
+  /// encryption.
+  String? compressionAlgorithm;
+
   @override
   JsonWebEncryption build() {
     if (encryptionAlgorithm == null) {
@@ -249,7 +265,8 @@ class JsonWebEncryptionBuilder extends JoseObjectBuilder<JsonWebEncryption> {
 
     var cek = JsonWebKey.generate(encryptionAlgorithm);
     var sharedUnprotectedHeaderParams = <String, dynamic>{
-      'enc': encryptionAlgorithm
+      'enc': encryptionAlgorithm,
+      if (compressionAlgorithm != null) 'zip': compressionAlgorithm,
     };
 
     var recipientsMapped = recipients.map((r) {
@@ -306,7 +323,20 @@ class JsonWebEncryptionBuilder extends JoseObjectBuilder<JsonWebEncryption> {
             List.generate(12, (_) => Random.secure().nextInt(256)))
         : null;
 
-    var encryptedData = cek.encrypt(data!,
+    var data = this.data!;
+
+    switch (compressionAlgorithm) {
+      case null:
+        break;
+      case 'DEF':
+        data = Deflate(data).getBytes();
+        break;
+      default:
+        throw JoseException(
+            'Unsupported compression algorithm $compressionAlgorithm');
+    }
+
+    var encryptedData = cek.encrypt(data,
         initializationVector: iv,
         additionalAuthenticatedData: Uint8List.fromList(aad.codeUnits));
     return JsonWebEncryption._(encryptedData.data, recipientsMapped,

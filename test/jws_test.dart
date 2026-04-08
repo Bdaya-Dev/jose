@@ -249,6 +249,7 @@ void main() {
       const key = {
         "crv": "P-256",
         "kty": "EC",
+        "kid": "did:web:talao.co#key-2",
         "x": "Bls7WaGu_jsharYBAzakvuSERIV_IFR2tS64e5p_Y_Q",
         "y": "haeKjXQ9uzyK4Ind1W4SBUkR_9udjjx1OmKK4vl1jko"
       };
@@ -257,7 +258,8 @@ void main() {
       final isVerified = await jws.verify(keyStore);
       expect(isVerified, isTrue);
     });
-    test('appsub-dart/jose#57', () async {
+    test('appsup-dart/jose#57 - parse from JSON with multiple signatures',
+        () async {
       final testData = {
         'payload':
             'eyJpc3MiOiJqb2UiLA0KICJleHAiOjEzMDA4MTkzODAsDQogImh0dHA6Ly9leGF'
@@ -266,12 +268,13 @@ void main() {
           {
             'protected': 'eyJhbGciOiJSUzI1NiJ9',
             'header': {'kid': '2010-12-29'},
-            'signature': 'cC4hiUPoj9Eetdgtv3hF80EGrhuB__dzERat0XF9g2VtQgr9PJbu3XOiZj5RZ'
-                'mh7AAuHIm4Bh-0Qc_lF5YKt_O8W2Fp5jujGbds9uJdbF9CUAr7t1dnZcAcQjb'
-                'KBYNX4BAynRFdiuB--f_nZLgrnbyTyWzO75vRK5h6xBArLIARNPvkSjtQBMHl'
-                'b1L07Qe7K0GarZRmB_eSN9383LcOLn6_dO--xi12jzDwusC-eOkHWEsqtFZES'
-                'c6BfI7noOPqvhJ1phCnvWh6IeYI2w9QOYEUipUTI8np6LbgGY9Fs98rqVt5AX'
-                'LIhWkWywlVmtVrBp0igcN_IoypGlUPQGe77Rw'
+            'signature':
+                'cC4hiUPoj9Eetdgtv3hF80EGrhuB__dzERat0XF9g2VtQgr9PJbu3XOiZj5RZ'
+                    'mh7AAuHIm4Bh-0Qc_lF5YKt_O8W2Fp5jujGbds9uJdbF9CUAr7t1dnZcAcQjb'
+                    'KBYNX4BAynRFdiuB--f_nZLgrnbyTyWzO75vRK5h6xBArLIARNPvkSjtQBMHl'
+                    'b1L07Qe7K0GarZRmB_eSN9383LcOLn6_dO--xi12jzDwusC-eOkHWEsqtFZES'
+                    'c6BfI7noOPqvhJ1phCnvWh6IeYI2w9QOYEUipUTI8np6LbgGY9Fs98rqVt5AX'
+                    'LIhWkWywlVmtVrBp0igcN_IoypGlUPQGe77Rw'
           },
           {
             'protected': 'eyJhbGciOiJFUzI1NiJ9',
@@ -286,6 +289,7 @@ void main() {
       final jwsMap = jsonDecode(jsonJWS) as Map<String, dynamic>;
       final jws = JsonWebSignature.fromJson(jwsMap);
       expect(jws.recipients, isNotEmpty);
+      expect(jws.toJson(), testData);
     });
   });
 }
