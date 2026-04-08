@@ -7,6 +7,15 @@ import 'package:http/testing.dart';
 import 'package:jose_plus/jose.dart';
 import 'package:test/test.dart';
 
+BigInt _decodeBase64UrlBigInt(String value) {
+  final bytes = base64Url.decode(value + '=' * ((4 - value.length % 4) % 4));
+  var out = BigInt.zero;
+  for (final b in bytes) {
+    out = (out << 8) + BigInt.from(b);
+  }
+  return out;
+}
+
 void main() {
   group('JWK Examples from RFC7517', () {
     group('Example JSON Web Key Sets', () {
@@ -343,6 +352,47 @@ void main() {
       var publicKey = jwk.cryptoKeyPair.publicKey as RsaPublicKey;
       expect(publicKey.modulus, BigInt.parse('12345678'));
       expect(publicKey.exponent, BigInt.parse('65537'));
+    });
+
+    test('fromCryptoKeys includes RSA CRT params and extractable flag', () {
+      final source = JsonWebKey.fromPem(
+        File('test/pem/rsa.key').readAsStringSync(),
+      );
+      final rsaPrivate = source.cryptoKeyPair.privateKey as RsaPrivateKey;
+
+      final jwk = JsonWebKey.fromCryptoKeys(
+        publicKey: source.cryptoKeyPair.publicKey,
+        privateKey: source.cryptoKeyPair.privateKey,
+        extractable: false,
+      );
+
+      expect(jwk.extractable, isFalse);
+      expect(jwk.toJson(), containsPair('dp', isA<String>()));
+      expect(jwk.toJson(), containsPair('dq', isA<String>()));
+      expect(jwk.toJson(), containsPair('qi', isA<String>()));
+
+      expect(_decodeBase64UrlBigInt(jwk['dp']), rsaPrivate.calculateDp());
+      expect(_decodeBase64UrlBigInt(jwk['dq']), rsaPrivate.calculateDq());
+      expect(_decodeBase64UrlBigInt(jwk['qi']), rsaPrivate.calculateQi());
+    });
+
+    test('extractable is propagated for EC and symmetric keys', () {
+      final ec = JsonWebKey.fromPem(
+        File('test/pem/ec256.key').readAsStringSync(),
+      );
+
+      final ecJwk = JsonWebKey.fromCryptoKeys(
+        publicKey: ec.cryptoKeyPair.publicKey,
+        privateKey: ec.cryptoKeyPair.privateKey,
+        extractable: true,
+      );
+      expect(ecJwk.extractable, isTrue);
+
+      final symmetric = JsonWebKey.symmetric(
+        key: BigInt.from(42),
+        extractable: false,
+      );
+      expect(symmetric.extractable, isFalse);
     });
   });
 }
