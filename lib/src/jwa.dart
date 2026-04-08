@@ -243,7 +243,7 @@ class JsonWebAlgorithm {
       },
       'alg': name,
       'use': use,
-      'keyOperations': keyOperations,
+      'key_ops': keyOperations,
       'ext': true,
     });
   }
