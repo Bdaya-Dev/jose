@@ -68,16 +68,67 @@ class JsonWebEncryption extends JoseObject {
   JsonWebEncryption.fromJson(Map<String, dynamic> json)
       : this._(
           decodeBase64EncodedBytes(json['ciphertext']),
-          List.unmodifiable(json.containsKey('recipients')
-              ? (json['recipients'] as List).map((v) => _JweRecipient._(
+          // Determine recipients according to RFC7516 general/flattened or
+          // fallback when neither recipients nor header are present.
+          List.unmodifiable(() {
+            if (json.containsKey('recipients')) {
+              // General JSON Serialization
+              return (json['recipients'] as List).map(
+                (v) => _JweRecipient._(
                   header: JsonObject.from(v['header']),
-                  encryptedKey: decodeBase64EncodedBytes(v['encrypted_key'])))
-              : [
-                  _JweRecipient._(
-                      header: JsonObject.from(json['header']),
-                      encryptedKey:
-                          decodeBase64EncodedBytes(json['encrypted_key']))
-                ]),
+                  encryptedKey: decodeBase64EncodedBytes(v['encrypted_key']),
+                ),
+              );
+            }
+            var encryptedKey = json.containsKey('encrypted_key')
+                ? decodeBase64EncodedBytes(json['encrypted_key'])
+                : <int>[];
+
+            if (json.containsKey('header')) {
+              // Flattened JSON Serialization (header present)
+              var hdr = json['header'];
+              return [
+                _JweRecipient._(
+                  header: hdr == null ? null : JsonObject.from(hdr),
+                  encryptedKey: encryptedKey,
+                ),
+              ];
+            }
+            // (Do not treat presence of only 'encrypted_key' as flattened; fall back to protected header derivation)
+            // Fallback: No recipients array and no per-recipient header.
+            // Try to derive necessary information from protected header.
+            // This supports cases where all header parameters (alg, enc, kid, ...)
+            // are only present in the protected header.
+            var protectedHeader = json['protected'];
+            if (protectedHeader == null) {
+              throw ArgumentError('Missing protected header for JWE');
+            }
+            // We still build a single recipient to keep internal model consistent.
+            // encrypted_key may be legitimately absent for direct encryption (alg == 'dir').
+            JsonObject? derivedRecipientHeader;
+            var phDecoded = JsonObject.decode(protectedHeader);
+            var alg = phDecoded['alg'];
+            var kid = phDecoded['kid'];
+            if (alg != null) {
+              // Populate derived recipient header so downstream logic finds per-recipient alg
+              derivedRecipientHeader = JsonObject.from({
+                'alg': alg,
+                if (kid != null) 'kid': kid,
+              });
+            }
+
+            // Encrypted key must be present unless alg == 'dir'.
+            if (encryptedKey.isEmpty && alg != null && alg != 'dir') {
+              throw ArgumentError('Missing encrypted_key for algorithm "$alg"');
+            }
+
+            return [
+              _JweRecipient._(
+                header: derivedRecipientHeader,
+                encryptedKey: encryptedKey,
+              ),
+            ];
+          }()),
           protectedHeader: JsonObject.decode(json['protected']),
           unprotectedHeader: json['unprotected'] == null
               ? null

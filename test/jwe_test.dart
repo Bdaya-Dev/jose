@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:jose_plus/jose.dart';
+import 'package:jose_plus/src/util.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -284,6 +285,120 @@ void main() {
         utf8.decode(
             jwe.getPayloadFor(jwk, jwe.commonHeader, jwe.recipients.first)!),
         '{"aud": "somekey", "sub": 12, "iss": "auth.example.com", "exp": 1617349353}');
+  });
+
+  group('Fallback JWE JSON parsing (no recipients/header)', () {
+    test('Direct encryption without encrypted_key succeeds', () async {
+      var payload = 'Secret message';
+      var builder = JsonWebEncryptionBuilder()..stringContent = payload;
+      builder.encryptionAlgorithm = 'A256GCM';
+      // Generate a symmetric key for direct encryption
+      var key = JsonWebKey.generate(builder.encryptionAlgorithm);
+      builder.addRecipient(key, algorithm: 'dir');
+      var jwe = builder.build();
+      // Build JSON representation without recipients/header and intentionally omit encrypted_key
+      var compact = jwe.toCompactSerialization().split('.');
+      // compact parts: [protected, encrypted_key (empty for dir), iv, ciphertext, tag]
+      var fallbackJson = {
+        'protected': compact[0],
+        // intentionally no 'encrypted_key'
+        'iv': compact[2],
+        'ciphertext': compact[3],
+        'tag': compact[4]
+      };
+      var parsed = JsonWebEncryption.fromJson(fallbackJson);
+      var keyStore = JsonWebKeyStore()..addKey(key);
+      expect((await parsed.getPayload(keyStore)).stringContent, payload);
+    });
+
+    test('Missing encrypted_key for non-direct algorithm throws', () async {
+      var payload = 'Another secret';
+      var builder = JsonWebEncryptionBuilder()..stringContent = payload;
+      builder.encryptionAlgorithm = 'A128CBC-HS256';
+      // Use an octet key suitable for key wrapping (A128KW)
+      var key =
+          JsonWebKey.fromJson({'kty': 'oct', 'k': 'GawgguFyGrWKav7AX4VKUg'});
+      builder.addRecipient(key, algorithm: 'A128KW');
+      var jwe = builder.build();
+      var compact = jwe.toCompactSerialization().split('.');
+      // Remove encrypted_key field
+      var fallbackJson = {
+        'protected': compact[0],
+        // encrypted_key omitted but algorithm in protected header is not 'dir'
+        'iv': compact[2],
+        'ciphertext': compact[3],
+        'tag': compact[4]
+      };
+      expect(
+          () => JsonWebEncryption.fromJson(fallbackJson), throwsArgumentError);
+    });
+
+    test('Parse JWE protected header (Base64URL unpadded)', () {
+      final jweJson = {
+        'ciphertext':
+            'F9vgLFXCxXd46RVux-YNAT0aSxAevRvz0Po1vLrbc45vTC3r_S8fv2S24I9IVOjRvE1CJm73-cyf04CvtngCiyLwgzhnr2hFiIzVOQ4bM077_KqHkn0rWHD5xGekxNHcGpVMkcXfhwnRGNMTCfcnJV5YbolDNYXwYJw4Wcjk2suLCPB-NFK0yuakmszOzC82PIlKBJ4VQ0Gjh_R5DsQoz00IcpvQogzsYWxgbV87TsGXrjqbV8x97ng_8B0V0Yd9EURg3SWJqsuWFPFig9k2voNwurztmKoRiNbYEdIV5Zn-AP96G7p4i76rY0h_v-NdBsTz38z17Qu_1W8-RNsdcH0rGUblQPQV6VWVQjrS3D6AfSoz-uoYga2X3BISU1GTmsqtHnOauq03aT2pN33PqxQ0nxQgJ1bvU1E4BuHugN6Mt9kVwv9ssNeYk3QE6gax4LE24f1SGH3-PfKQ0hwGfeql6yRdVA',
+        'encrypted_key':
+            'eId1wPPb7TEH9PazhcUsYEk5_nPOfVmqxwui7W7k5bqbIvIsJKX7vIh3xrcYF51fheHvOdZfqewWoJY3PTtPwBg1pJ-IE6V8UPKFpyJ6p8ETjKpypE5VijXrYeqTfFAXxpU3dhk5xVnm7eF8YfymmqzHA2_ErFzqbHu6e5JK6xGFkSc_bMINBBs1612ow1HHBr1LnnGUGM5hVX0bydisnJG9kkxLX7PH_0Np1vzkRspVlsi16zK4uA09GXraxIVo5GQNPoEdoAqC7AK71DzThOBMZMbN7incVJxegBnO8G0oqkG9IvCHHglTP6wtOVF_qzNNZ36-q5uxDatw4-oc6Q',
+        'iv': '4fX9lmzwwR1d4Jbw',
+        'protected':
+            'eyJhbGciOiJSU0EtT0FFUC0yNTYiLCJlbmMiOiJBMjU2R0NNIiwia2lkIjoiZGlkOmlkZW4zOmJpbGxpb25zOnRlc3Q6MlZ4bm9pTnFkTVB5SE10VXdBRXpobldxWEdrRWVKcEFwNG50VGtMOFhUI2tleTEiLCJ0eXAiOiJhcHBsaWNhdGlvbi9pZGVuM2NvbW0tZW5jcnlwdGVkLWpzb24ifQ',
+        'tag': 'of7WWH7gbhEiADgowsXiOA',
+      };
+      // Parsing should succeed and derive header values from protected header (unpadded base64url)
+      final jwe = JsonWebEncryption.fromJson(jweJson);
+      final header = jwe.commonHeader;
+      expect(header.algorithm, 'RSA-OAEP-256');
+      expect(header.encryptionAlgorithm, 'A256GCM');
+      expect(header.type, 'application/iden3comm-encrypted-json');
+      expect(header.keyId, isNotNull);
+      // Ensure keyId has expected suffix fragment
+      expect(header.keyId!.endsWith('#key1'), isTrue);
+      // Ensure no recipients array created (flattened/fallback single recipient)
+      expect(jwe.recipients.length, 1);
+    });
+
+    test('Key wrapping (non-dir) fallback with encrypted_key present',
+        () async {
+      var payload = 'Key wrap fallback';
+      var builder = JsonWebEncryptionBuilder()..stringContent = payload;
+      builder.encryptionAlgorithm = 'A128CBC-HS256';
+      var key =
+          JsonWebKey.fromJson({'kty': 'oct', 'k': 'GawgguFyGrWKav7AX4VKUg'});
+      builder.addRecipient(key, algorithm: 'A128KW');
+      var jwe = builder.build();
+      var parts = jwe.toCompactSerialization().split('.');
+      var fallbackJson = {
+        'protected': parts[0],
+        'encrypted_key': parts[1],
+        'iv': parts[2],
+        'ciphertext': parts[3],
+        'tag': parts[4]
+      };
+      var parsed = JsonWebEncryption.fromJson(fallbackJson);
+      var store = JsonWebKeyStore()..addKey(key);
+      expect((await parsed.getPayload(store)).stringContent, payload);
+      expect(parsed.commonHeader.algorithm, 'A128KW');
+      expect(parsed.commonHeader.encryptionAlgorithm, 'A128CBC-HS256');
+    });
+
+    test('Error when protected header missing', () {
+      var json = {
+        'iv': 'AA',
+        'ciphertext': 'AA',
+        'tag': 'AA'
+      }; // intentionally minimal
+      expect(() => JsonWebEncryption.fromJson(json), throwsArgumentError);
+    });
+
+    test('Error for invalid protected header base64/json', () {
+      var json = {
+        'protected': '***', // invalid base64 / json
+        'iv': 'AA',
+        'ciphertext': 'AA',
+        'tag': 'AA'
+      };
+      expect(() => JsonWebEncryption.fromJson(json), throwsA(isA<Exception>()));
+    });
   });
 }
 
