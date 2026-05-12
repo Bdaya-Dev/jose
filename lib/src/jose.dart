@@ -85,6 +85,22 @@ class JoseHeader extends JsonObject {
   ///
   /// Only for [JsonWebEncryption] objects
   String? get compressionAlgorithm => getTyped('zip');
+
+  /// The ephemeral public key for ECDH key agreement.
+  ///
+  /// Only for [JsonWebEncryption] objects using ECDH-ES algorithms.
+  JsonWebKey? get ephemeralPublicKey =>
+      getTyped<JsonWebKey?>('epk', factory: (v) => JsonWebKey.fromJson(v));
+
+  /// Agreement PartyUInfo value for ECDH key agreement.
+  ///
+  /// Only for [JsonWebEncryption] objects using ECDH-ES algorithms.
+  String? get agreementPartyUInfo => getTyped('apu');
+
+  /// Agreement PartyVInfo value for ECDH key agreement.
+  ///
+  /// Only for [JsonWebEncryption] objects using ECDH-ES algorithms.
+  String? get agreementPartyVInfo => getTyped('apv');
 }
 
 /// Base class for [JsonWebSignature] and [JsonWebEncryption].
