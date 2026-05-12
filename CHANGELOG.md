@@ -1,9 +1,3 @@
-## 0.4.8
- - **FIX**: JWE JSON parsing now handles missing `recipients` / `header` by deriving a single recipient from the protected header and validates absent `encrypted_key` for non-`dir` algorithms.
- - **FEAT**: Support unpadded Base64URL protected header (new parsing test). 
- - **TEST**: Added fallback, AAD, key wrap, and error path tests.
- - **CHORE**: Refactored `JsonWebEncryption.fromJson` for clarity.
-
 ## [0.5.0](https://github.com/Bdaya-Dev/jose/compare/v0.4.8...v0.5.0) (2026-05-11)
 
 

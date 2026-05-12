@@ -25,6 +25,16 @@ void main() {
           expect(key.cryptoKeyPair.privateKey, keyPair.privateKey);
         }
 
+        // All generated keys should explicitly mark extractability.
+        expect(key.extractable, isTrue);
+
+        if (a.type == 'RSA') {
+          final keyJson = key.toJson();
+          expect(keyJson, containsPair('dp', isA<String>()));
+          expect(keyJson, containsPair('dq', isA<String>()));
+          expect(keyJson, containsPair('qi', isA<String>()));
+        }
+
         switch (a.use) {
           case 'sig':
             expect(key.keyOperations, {'sign', 'verify'});
@@ -43,6 +53,16 @@ void main() {
                 data);
         }
       }
+    });
+
+    test('generateRandomKey for RSA includes CRT fields', () {
+      final key = JsonWebAlgorithm.rs256.generateRandomKey();
+      final keyJson = key.toJson();
+
+      expect(keyJson, containsPair('dp', isA<String>()));
+      expect(keyJson, containsPair('dq', isA<String>()));
+      expect(keyJson, containsPair('qi', isA<String>()));
+      expect(key.extractable, isTrue);
     });
   });
 }

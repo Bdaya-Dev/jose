@@ -122,6 +122,16 @@ String encodeBigInt(BigInt? v) {
   return convert.base64Url.encode(bytes.reversed.toList());
 }
 
+BigInt decodeBigInt(String s) {
+  final b256 = BigInt.from(256);
+  var bytes = convert.base64Url.decode(s + '=' * ((4 - s.length % 4) % 4));
+  BigInt v = BigInt.zero;
+  for (var b in bytes) {
+    v = (v * b256) + BigInt.from(b);
+  }
+  return v;
+}
+
 Map<String, dynamic> safeUnion(Iterable<Map<String, dynamic>?> items) {
   var out = <String, dynamic>{};
   for (var i in items) {
